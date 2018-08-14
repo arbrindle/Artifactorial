@@ -23,6 +23,7 @@ from django.contrib.auth.models import User, Group
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.urls import reverse
 from django.utils.encoding import python_2_unicode_compatible
 from django.utils.timezone import datetime, utc
 
@@ -38,7 +39,7 @@ def random_hash():
 
 @python_2_unicode_compatible
 class AuthToken(models.Model):
-    user = models.ForeignKey(User, blank=False)
+    user = models.ForeignKey(User, blank=False, on_delete=models.CASCADE)
     secret = models.TextField(max_length=32, unique=True, default=random_hash)
     description = models.TextField(null=False, blank=True)
 
@@ -53,8 +54,8 @@ class AuthToken(models.Model):
 class Directory(models.Model):
     path = models.CharField(max_length=300, unique=True,
                             null=False, blank=False)
-    user = models.ForeignKey(User, null=True, blank=True)
-    group = models.ForeignKey(Group, null=True, blank=True)
+    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    group = models.ForeignKey(Group, null=True, blank=True, on_delete=models.SET_NULL)
     is_public = models.BooleanField(default=False)
     ttl = models.IntegerField(blank=False, default=90,
                               help_text="Files TTL in days")
@@ -85,9 +86,8 @@ class Directory(models.Model):
         else:
             return "%s (anonymous)" % (self.path)
 
-    @models.permalink
     def get_absolute_url(self):
-        return ("artifacts", [self.path[1:] + '/'])
+        return reverse("artifacts", args=[self.path[1:] + '/'])
 
     def is_visible_to(self, user):
         """
@@ -164,16 +164,15 @@ def get_path_name(instance, filename):
 @python_2_unicode_compatible
 class Artifact(models.Model):
     path = models.FileField(upload_to=get_path_name)
-    directory = models.ForeignKey(Directory, blank=False)
+    directory = models.ForeignKey(Directory, blank=False, on_delete=models.CASCADE)
     is_permanent = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.path.name
 
-    @models.permalink
     def get_absolute_url(self):
-        return ("artifacts", [self.path.name])
+        return reverse("artifacts", [self.path.name])
 
     def is_visible_to(self, user):
         return self.directory.is_visible_to(user)
@@ -185,12 +184,11 @@ class Artifact(models.Model):
 @python_2_unicode_compatible
 class Share(models.Model):
     token = models.TextField(max_length=32, unique=True, default=random_hash)
-    artifact = models.ForeignKey(Artifact, blank=False)
-    user = models.ForeignKey(User, blank=False)
+    artifact = models.ForeignKey(Artifact, blank=False, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, blank=False, on_delete=models.CASCADE)
 
     def __str__(self):
         return "%s -> %s" % (self.token, self.artifact)
 
-    @models.permalink
     def get_absolute_url(self):
-        return ("shares", [self.token])
+        return reverse("shares", [self.token])
